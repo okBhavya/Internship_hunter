@@ -90,7 +90,7 @@ export default function SearchSettingsPage() {
         </div>
 
         <label className="flex items-center gap-3 text-sm">
-          <input type="checkbox" checked={prefs.remote_only}
+          <input type="checkbox" checked={prefs.remote_only ?? true}
             onChange={e => setPrefs({ ...prefs, remote_only: e.target.checked })} className="rounded" />
           Remote positions only
         </label>
@@ -104,7 +104,7 @@ export default function SearchSettingsPage() {
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Employment Types</label>
           <div className="flex flex-wrap gap-3">
-            {['internship', 'co_op', 'graduate', 'full_time'].map(t => (
+            {['internship', 'co_op'].map(t => (
               <label key={t} className="flex items-center gap-1.5 text-sm">
                 <input type="checkbox"
                   checked={prefs.employment_types?.includes(t)}

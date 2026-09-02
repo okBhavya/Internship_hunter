@@ -694,19 +694,25 @@ def seed_preferences(db: Session = Depends(get_db)):
     prefs.keywords = [
         "Software Engineer Intern",
         "Software Engineering Intern",
+        "Software Development Intern",
         "Data Science Intern",
         "Machine Learning Intern",
-        "Machine Learning Engineer Intern",
+        "ML Engineer Intern",
         "AI Intern",
-        "Applied AI",
-        "Data Analyst",
-        "Backend Engineer",
-        "Full Stack Engineer",
+        "Applied AI Intern",
+        "Deep Learning Intern",
+        "NLP Intern",
+        "Computer Vision Intern",
+        "Backend Developer Intern",
+        "Full Stack Developer Intern",
+        "Data Analyst Intern",
+        "Research Intern AI",
+        "Research Intern ML",
     ]
     prefs.locations = ["Worldwide"]
     prefs.remote_only = True
-    prefs.employment_types = ["internship", "co_op", "graduate", "full_time"]
-    prefs.min_fit_score = 50
+    prefs.employment_types = ["internship", "co_op"]
+    prefs.min_fit_score = 40
     prefs.require_sponsorship_eligible = True
     prefs.preferred_countries = ["Worldwide"]
 

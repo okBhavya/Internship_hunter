@@ -39,7 +39,7 @@ class RemotiveSource(JobSourceAdapter):
                     categories_to_search.add(cat)
 
         if not categories_to_search:
-            categories_to_search = {"software-dev", "data", "qa"}
+            categories_to_search = {"software-dev", "data"}
 
         async with httpx.AsyncClient(timeout=30.0) as client:
             for category in categories_to_search:
@@ -51,28 +51,37 @@ class RemotiveSource(JobSourceAdapter):
                         job_list = data.get("jobs", [])
 
                         for j in job_list:
-                            # Filter by keywords
                             title = (j.get("title") or "").lower()
-                            desc = (j.get("description") or "").lower()
-                            company = (j.get("company_name") or "").lower()
 
-                            # Accept all jobs from the category (category already filters)
-                            if True:
-                                raw = RawJob(
-                                    external_id=str(j.get("id", "")),
-                                    title=j.get("title", ""),
-                                    company=j.get("company_name", ""),
-                                    location=j.get("candidate_required_location", "Remote"),
-                                    remote_type="remote",
-                                    employment_type="internship" if "intern" in title else "full_time",
-                                    description=j.get("description", "")[:5000],
-                                    application_url=j.get("url", ""),
-                                    source_url=j.get("url", ""),
-                                    date_posted=j.get("publication_date", ""),
-                                    salary=j.get("salary", ""),
-                                    raw_data=j,
-                                )
-                                jobs.append(raw)
+                            # Strict: require internship / entry-level / co-op in title
+                            intern_words = ["intern", "internship", "co-op", "coop", "trainee", "apprentice"]
+                            entry_words = ["junior", "entry", "associate", "new grad", "graduate"]
+                            is_internship = any(w in title for w in intern_words)
+                            is_entry_level = any(w in title for w in entry_words)
+                            if not is_internship and not is_entry_level:
+                                continue
+
+                            # Require the job is in our target field
+                            target_fields = ["software", "engineer", "developer", "data", "machine learning",
+                                             "ml", " ai", "backend", "frontend", "full stack", "fullstack"]
+                            if not any(f in title for f in target_fields):
+                                continue
+
+                            raw = RawJob(
+                                external_id=str(j.get("id", "")),
+                                title=j.get("title", ""),
+                                company=j.get("company_name", ""),
+                                location=j.get("candidate_required_location", "Remote"),
+                                remote_type="remote",
+                                employment_type="internship" if "intern" in title else "full_time",
+                                description=j.get("description", "")[:5000],
+                                application_url=j.get("url", ""),
+                                source_url=j.get("url", ""),
+                                date_posted=j.get("publication_date", ""),
+                                salary=j.get("salary", ""),
+                                raw_data=j,
+                            )
+                            jobs.append(raw)
 
                         await asyncio.sleep(0.5)  # Rate limiting
                 except Exception as e:
@@ -94,7 +103,6 @@ class RemotiveSource(JobSourceAdapter):
         """Fetch a specific job from Remotive."""
         async with httpx.AsyncClient(timeout=30.0) as client:
             try:
-                # Remotive doesn't have single-job endpoint, search instead
                 resp = await client.get(self.API_URL, params={"id": job_id})
                 if resp.status_code == 200:
                     data = resp.json()

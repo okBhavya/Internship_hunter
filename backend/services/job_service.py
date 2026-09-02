@@ -148,6 +148,7 @@ async def run_discovery(
         # Run matching after discovery
         unmatched_jobs = db.query(Job).filter(
             Job.is_duplicate == False,
+            Job.internship_or_fulltime.in_(["internship", "co_op"]),
             ~Job.id.in_(db.query(JobMatch.job_id))
         ).limit(200).all()
 
@@ -192,9 +193,14 @@ def get_dashboard_stats(db: Session) -> dict:
 
     user = get_or_create_user(db)
 
-    total_jobs = db.query(Job).filter(Job.is_duplicate == False).count()
-    total_matches = db.query(JobMatch).filter(JobMatch.fit_score >= 60).count()
-    total_apps = db.query(Application).filter(Application.user_id == user.id).count() if False else 0
+    total_jobs = db.query(Job).filter(Job.is_duplicate == False, Job.internship_or_fulltime.in_(["internship", "co_op"])).count()
+    total_matches = (
+        db.query(JobMatch)
+        .join(Job, Job.id == JobMatch.job_id)
+        .filter(JobMatch.fit_score >= 40, Job.internship_or_fulltime.in_(["internship", "co_op"]))
+        .count()
+    )
+    
     applied = 0
     interviews = 0
 
