@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api, AgentRun } from '../api';
+import { api, type AgentRun } from '../api';
 import { Activity, CheckCircle, XCircle, Clock, AlertTriangle, Loader } from 'lucide-react';
 
 export default function AgentActivityPage() {

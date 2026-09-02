@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api, Job, JobMatch } from '../api';
+import { api, type Job, type JobMatch } from '../api';
 import { Search, Filter, ExternalLink, MapPin, Clock, Building2, ChevronDown } from 'lucide-react';
 
 interface JobWithMatch { job: Job; match: JobMatch | null; }

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api, Job, JobMatch } from '../api';
+import { api, type Job, type JobMatch } from '../api';
 import { Star, ExternalLink, MapPin, Building2, AlertTriangle, CheckCircle } from 'lucide-react';
 
 export default function TopMatchesPage() {

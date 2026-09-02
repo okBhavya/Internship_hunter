@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api, DashboardStats } from '../api';
+import { api, type DashboardStats } from '../api';
 import { Briefcase, Star, FileText, Send, Eye, TrendingUp, Building2, Target } from 'lucide-react';
 
 export default function OverviewPage() {

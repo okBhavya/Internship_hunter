@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api, Application } from '../api';
+import { api, type Application } from '../api';
 import { FileText, Eye, CheckCircle, XCircle, Clock, ExternalLink, MessageSquare, Star } from 'lucide-react';
 
 const STATUS_TABS = [
