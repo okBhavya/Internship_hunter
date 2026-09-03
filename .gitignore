@@ -9,6 +9,7 @@ build/
 
 # Database
 *.db
+database/*.json
 
 # Environment
 .env

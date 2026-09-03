@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { api, User, Education, Skill, Project, Experience } from '../api';
+import { api } from '../api';
+import type { User } from '../api';
 import { User as UserIcon, GraduationCap, Code, Briefcase, Award, Upload, Plus, X } from 'lucide-react';
 
 export default function ProfilesPage() {

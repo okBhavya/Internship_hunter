@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { api, DashboardStats } from '../api';
+import { api } from '../api';
+import type { DashboardStats } from '../api';
 import { BarChart3, TrendingUp } from 'lucide-react';
 
 export default function AnalyticsPage() {

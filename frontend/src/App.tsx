@@ -1,7 +1,7 @@
 import { Routes, Route, Link, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, Briefcase, Star, FileText, Settings, Activity,
-  Search, Upload, BarChart3, Bell, ChevronLeft, ChevronRight, Menu, X
+  Search, Upload, BarChart3, Bell, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import OverviewPage from './pages/OverviewPage';
@@ -30,7 +30,7 @@ const navItems = [
 function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const location = useLocation();
-  const [notifCount, setNotifCount] = useState(0);
+  const notifCount = 0;
 
   useEffect(() => {
     // Check if profile exists, redirect to setup if not

@@ -15,9 +15,10 @@ from backend.sources.base import RawJob, JobSourceAdapter
 from backend.services.duplicate_detector import is_duplicate
 from backend.services.matching_engine import score_job_match
 from backend.services.profile_service import get_or_create_user, get_user_profile_summary
+from backend.services.strict_qualification import qualify_job
 
 
-def save_raw_jobs(db: Session, raw_jobs: List[RawJob], source_name: str) -> int:
+def save_raw_jobs(db: Session, raw_jobs: List[RawJob], source_name: str, user: User = None) -> int:
     """Save normalized jobs to database, skipping duplicates. Returns count saved."""
     existing_jobs = db.query(Job).filter(Job.is_duplicate == False).all()
     saved = 0
@@ -25,6 +26,10 @@ def save_raw_jobs(db: Session, raw_jobs: List[RawJob], source_name: str) -> int:
 
     for raw in raw_jobs:
         normalized = adapter.normalize(raw)
+        decision = qualify_job(normalized, user)
+        if not decision["qualified"]:
+            # Reject before the application/matching pipeline. The discovery run retains counts.
+            continue
 
         # Check for duplicates against existing DB jobs
         dup_id = is_duplicate(normalized, existing_jobs)
@@ -118,7 +123,7 @@ async def run_discovery(
         for source in sources:
             try:
                 raw_jobs = await source.search(keywords, limit=limit_per_source)
-                saved = save_raw_jobs(db, raw_jobs, source.name)
+                saved = save_raw_jobs(db, raw_jobs, source.name, user)
                 results["sources"][source.name] = {
                     "found": len(raw_jobs),
                     "saved": saved,

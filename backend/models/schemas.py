@@ -206,8 +206,8 @@ class SearchPreferenceBase(BaseModel):
     ]
     locations: List[str] = ["Worldwide"]
     remote_only: bool = True
-    employment_types: List[str] = ["internship", "co_op", "graduate", "full_time"]
-    min_fit_score: int = 60
+    employment_types: List[str] = ["internship", "co_op"]
+    min_fit_score: int = 70
     require_sponsorship_eligible: bool = True
     exclude_companies: List[str] = []
     preferred_countries: List[str] = ["Worldwide"]

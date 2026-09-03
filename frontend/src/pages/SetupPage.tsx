@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { api } from '../api';
-import { CheckCircle, Upload, Settings, Search, Rocket, Loader } from 'lucide-react';
+import { CheckCircle, Settings, Search, Rocket, Loader } from 'lucide-react';
 
 const STEPS = [
   { id: 1, label: 'Seed Profile', icon: CheckCircle, description: 'Load your resume data into the system' },

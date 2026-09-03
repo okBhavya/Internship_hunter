@@ -99,13 +99,14 @@ def start_application(db: Session, job_id: int, mode: str = "prepare") -> Applic
 
 
 def approve_application(db: Session, application_id: int) -> Application:
-    """Approve an application."""
+    """Queue a permitted browser workflow; never record a submission before one occurs."""
     app = db.query(Application).filter(Application.id == application_id).first()
     if not app:
         raise ValueError(f"Application {application_id} not found")
 
-    app.status = "applied"
-    app.date_applied = datetime.datetime.utcnow()
+    # A real site-specific Playwright adapter must return a confirmation before this
+    # can become ``applied``. This protects the tracker from false submission claims.
+    app.status = "manual_action_required"
     db.commit()
     db.refresh(app)
 
@@ -113,9 +114,9 @@ def approve_application(db: Session, application_id: int) -> Application:
     job = db.query(Job).filter(Job.id == app.job_id).first()
     notif = Notification(
         user_id=app.user_id,
-        title=f"Application approved: {job.title if job else 'Unknown'}",
-        message=f"Application has been marked as submitted.",
-        notification_type="success",
+        title=f"Application needs browser action: {job.title if job else 'Unknown'}",
+        message="A permitted site-specific adapter or user action is required before submission.",
+        notification_type="warning",
     )
     db.add(notif)
     db.commit()
