@@ -153,6 +153,21 @@ export interface ApplicationMaterials {
   question_answers: any[];
 }
 
+export interface AutoApplyResult {
+  job_id: number;
+  job_title: string;
+  company: string;
+  url: string;
+  status: 'filled' | 'blocked' | 'error';
+  fields_filled: number;
+  fields_total: number;
+  resume_uploaded: boolean;
+  cover_letter_filled: boolean;
+  blocked_by: string | null;
+  error: string | null;
+  screenshot: string | null;
+}
+
 export interface AgentRun {
   id: number;
   agent_name: string;
@@ -271,6 +286,18 @@ class ApiClient {
 
   // Sources
   getSources = () => this.request<any[]>('/sources');
+
+  // Auto-Apply
+  autoFillApplications = (jobIds: number[], dryRun = true) =>
+    this.request<{ results: AutoApplyResult[]; total: number }>(
+      '/auto-apply/fill',
+      { method: 'POST', body: JSON.stringify({ job_ids: jobIds, dry_run: dryRun }) }
+    );
+  autoApplyAll = () =>
+    this.request<{ results: AutoApplyResult[]; total: number }>(
+      '/auto-apply/apply-all',
+      { method: 'POST' }
+    );
 
   // Setup
   seedProfile = () => this.request('/seed-profile', { method: 'POST' });
