@@ -8,10 +8,11 @@ from pathlib import Path
 from typing import Optional, List
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, UploadFile, File, Form, Depends, HTTPException, Query
+from fastapi import FastAPI, UploadFile, File, Form, Depends, HTTPException, Query, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from backend.config import get_settings, BASE_DIR
@@ -43,6 +44,15 @@ from backend.services.application_service import (
 from backend.agents.orchestrator import Orchestrator
 
 settings = get_settings()
+
+
+class AutoApplyRequest(BaseModel):
+    job_ids: List[int]
+    dry_run: bool = True  # Fill forms but don't submit
+
+
+class FormDetectRequest(BaseModel):
+    url: str
 
 
 @asynccontextmanager
@@ -263,7 +273,6 @@ def list_jobs(
 
     # Sort
     if sort_by == "fit_score":
-        # Join with matches
         query = query.join(JobMatch, JobMatch.job_id == Job.id, isouter=True)
         query = query.order_by(JobMatch.fit_score.desc().nullslast())
     elif sort_by == "discovered_at":
@@ -324,9 +333,7 @@ def top_matches(
 
     return results
 
-
 @app.get("/api/jobs/{job_id}", tags=["Jobs"])
-
 def get_job(job_id: int, db: Session = Depends(get_db)):
     job = db.query(Job).filter(Job.id == job_id).first()
     if not job:
@@ -472,6 +479,11 @@ def get_application_materials_endpoint(app_id: int, db: Session = Depends(get_db
     return get_application_materials(db, app_id)
 
 
+@app.post("/api/applications/{app_id}/verify", tags=["Applications"])
+def verify_application(app_id: int, db: Session = Depends(get_db)):
+    orchestrator = Orchestrator(db)
+    return orchestrator.verification_agent.verify_application(app_id)
+
 
 @app.post("/api/applications/batch-prepare", tags=["Applications"])
 def batch_prepare(
@@ -488,6 +500,145 @@ def batch_prepare(
         except Exception as e:
             results.append({"job_id": job_id, "status": "error", "error": str(e)})
     return results
+
+
+# ──────────────────────────────────────────────────────────────────
+# AUTO-APPLY ENDPOINTS
+# ──────────────────────────────────────────────────────────────────
+
+@app.post("/api/auto-apply/detect", tags=["Auto-Apply"])
+async def detect_form(request: FormDetectRequest):
+    """Detect form structure on an application URL."""
+    from backend.browser import AutoApplyEngine
+    engine = AutoApplyEngine(headless=True)
+    try:
+        form = await engine.detect_form(request.url)
+        return {
+            "url": form.url,
+            "platform": form.detected_platform,
+            "job_title": form.job_title,
+            "company": form.company,
+            "fields": form.fields,
+            "has_upload": form.has_upload,
+            "has_cover_letter": form.has_cover_letter,
+            "submit_button": form.submit_button_selector,
+        }
+    finally:
+        await engine.close()
+
+
+@app.post("/api/auto-apply/fill", tags=["Auto-Apply"])
+async def auto_fill_application(
+    request: AutoApplyRequest,
+    db: Session = Depends(get_db),
+):
+    """Auto-fill application forms for specified jobs."""
+    from backend.browser import AutoApplyEngine
+    from backend.services.material_generator import generate_cover_letter
+
+    user = get_or_create_user(db)
+    resume = db.query(Resume).filter(Resume.user_id == user.id, Resume.is_primary == True).first()
+    resume_path = resume.file_path if resume else None
+
+    user_data = {
+        "name": user.name or "",
+        "email": user.email or "",
+        "phone": user.phone or "",
+        "linkedin_url": user.linkedin_url or "",
+        "github_url": user.github_url or "",
+        "portfolio_url": user.portfolio_url or "",
+    }
+
+    engine = AutoApplyEngine(headless=True)
+    results = []
+
+    try:
+        for job_id in request.job_ids:
+            job = db.query(Job).filter(Job.id == job_id).first()
+            if not job or not job.application_url:
+                results.append({
+                    "job_id": job_id,
+                    "status": "error",
+                    "error": "Job not found or no application URL",
+                })
+                continue
+
+            # Generate cover letter for this job
+            match = db.query(JobMatch).filter(
+                JobMatch.job_id == job_id,
+                JobMatch.user_id == user.id,
+            ).first()
+            cover_letter = generate_cover_letter(user, job, match)
+
+            result = await engine.auto_fill(
+                url=job.application_url,
+                user_data=user_data,
+                resume_path=resume_path,
+                cover_letter=cover_letter,
+                dry_run=request.dry_run,
+            )
+
+            # Create application record
+            if result.fields_filled > 0:
+                app_record = start_application(db, job_id, "auto_fill")
+                if not request.dry_run and result.success:
+                    update_application_status(db, app_record.id, "applied", "Auto-filled and submitted")
+
+            results.append({
+                "job_id": job_id,
+                "job_title": job.title,
+                "company": job.company,
+                "url": job.application_url,
+                "status": "filled" if result.fields_filled > 0 else "blocked",
+                "fields_filled": result.fields_filled,
+                "fields_total": result.fields_total,
+                "resume_uploaded": result.resume_uploaded,
+                "cover_letter_filled": result.cover_letter_filled,
+                "blocked_by": result.blocked_by,
+                "error": result.error,
+                "screenshot": result.screenshot_path,
+            })
+
+    finally:
+        await engine.close()
+
+    return {"results": results, "total": len(results)}
+
+
+@app.post("/api/auto-apply/apply-all", tags=["Auto-Apply"])
+async def auto_apply_all(
+    min_score: float = Query(60),
+    dry_run: bool = Query(True),
+    db: Session = Depends(get_db),
+):
+    """Discover, match, prepare materials, and auto-apply to all qualifying jobs."""
+    # Step 1: Run discovery
+    discovery_results = await run_discovery(db)
+
+    # Step 2: Get top matches above threshold
+    user = get_or_create_user(db)
+    matches = (
+        db.query(JobMatch)
+        .filter(JobMatch.user_id == user.id, JobMatch.fit_score >= min_score)
+        .order_by(JobMatch.fit_score.desc())
+        .limit(20)
+        .all()
+    )
+
+    job_ids = [m.job_id for m in matches]
+
+    # Step 3: Auto-apply
+    if job_ids:
+        apply_request = AutoApplyRequest(job_ids=job_ids, dry_run=dry_run)
+        apply_results = await auto_fill_application(apply_request, db)
+    else:
+        apply_results = {"results": [], "total": 0}
+
+    return {
+        "discovery": discovery_results,
+        "matches_found": len(matches),
+        "applications": apply_results,
+    }
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -694,25 +845,19 @@ def seed_preferences(db: Session = Depends(get_db)):
     prefs.keywords = [
         "Software Engineer Intern",
         "Software Engineering Intern",
-        "Software Development Intern",
         "Data Science Intern",
         "Machine Learning Intern",
-        "ML Engineer Intern",
+        "Machine Learning Engineer Intern",
         "AI Intern",
         "Applied AI Intern",
-        "Deep Learning Intern",
-        "NLP Intern",
-        "Computer Vision Intern",
-        "Backend Developer Intern",
-        "Full Stack Developer Intern",
-        "Data Analyst Intern",
-        "Research Intern AI",
-        "Research Intern ML",
+        "Backend Engineer Intern",
+        "Frontend Engineer Intern",
+        "Full Stack Engineer Intern",
     ]
     prefs.locations = ["Worldwide"]
     prefs.remote_only = True
     prefs.employment_types = ["internship", "co_op"]
-    prefs.min_fit_score = 40
+    prefs.min_fit_score = 50
     prefs.require_sponsorship_eligible = True
     prefs.preferred_countries = ["Worldwide"]
 

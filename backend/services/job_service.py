@@ -8,7 +8,7 @@ from typing import List
 from sqlalchemy.orm import Session
 
 from backend.models.models import (
-    Job, JobSource, JobMatch, User, SearchPreference, AgentRun, Event,
+    Job, JobSource, JobMatch, Application, User, SearchPreference, AgentRun, Event,
 )
 from backend.sources import get_all_sources, get_source
 from backend.sources.base import RawJob, JobSourceAdapter
@@ -29,7 +29,6 @@ def save_raw_jobs(db: Session, raw_jobs: List[RawJob], source_name: str) -> int:
         # Check for duplicates against existing DB jobs
         dup_id = is_duplicate(normalized, existing_jobs)
         if dup_id is not None:
-            # Record the duplicate source
             canonical = db.query(Job).filter(Job.id == dup_id).first()
             if canonical:
                 dups = canonical.duplicate_sources or []
@@ -64,7 +63,7 @@ def save_raw_jobs(db: Session, raw_jobs: List[RawJob], source_name: str) -> int:
             raw_data=normalized.get("raw_data", {}),
         )
         db.add(job)
-        existing_jobs.append(job)  # Add to list for dedup of current batch
+        existing_jobs.append(job)
         saved += 1
 
     db.commit()
@@ -87,8 +86,6 @@ async def run_discovery(
     prefs = db.query(SearchPreference).filter(SearchPreference.user_id == user.id).first()
     if prefs:
         keywords = keywords or prefs.keywords
-        if prefs.locations and prefs.locations != ["Worldwide"]:
-            pass  # Could filter by location
 
     if not keywords:
         keywords = [
@@ -96,7 +93,7 @@ async def run_discovery(
             "Data Science Intern",
             "Machine Learning Intern",
             "AI Intern",
-            "Backend Engineer",
+            "Backend Engineer Intern",
         ]
 
     # Create agent run record
@@ -145,10 +142,9 @@ async def run_discovery(
 
         db.commit()
 
-        # Run matching after discovery
+        # Run matching on all discovered jobs (matching engine handles scoring)
         unmatched_jobs = db.query(Job).filter(
             Job.is_duplicate == False,
-            Job.internship_or_fulltime.in_(["internship", "co_op"]),
             ~Job.id.in_(db.query(JobMatch.job_id))
         ).limit(200).all()
 
@@ -174,7 +170,6 @@ async def run_discovery(
         agent_run.status = "completed"
         agent_run.outputs = results
         agent_run.completed_at = datetime.datetime.utcnow()
-        agent_run.duration_seconds = (agent_run.completed_at - agent_run.started_at).total_seconds()
         db.commit()
 
     except Exception as e:
@@ -193,26 +188,18 @@ def get_dashboard_stats(db: Session) -> dict:
 
     user = get_or_create_user(db)
 
-    total_jobs = db.query(Job).filter(Job.is_duplicate == False, Job.internship_or_fulltime.in_(["internship", "co_op"])).count()
-    total_matches = (
-        db.query(JobMatch)
-        .join(Job, Job.id == JobMatch.job_id)
-        .filter(JobMatch.fit_score >= 40, Job.internship_or_fulltime.in_(["internship", "co_op"]))
-        .count()
-    )
-    
-    applied = 0
-    interviews = 0
-
-    # Import Application here to avoid circular
-    from backend.models.models import Application
+    total_jobs = db.query(Job).filter(Job.is_duplicate == False).count()
+    total_matches = db.query(JobMatch).filter(JobMatch.fit_score >= 60).count()
     total_apps = db.query(Application).filter(Application.user_id == user.id).count()
-    applied = db.query(Application).filter(Application.user_id == user.id, Application.status == "applied").count()
-    interviews = db.query(Application).filter(Application.user_id == user.id, Application.status == "interview").count()
+    applied = db.query(Application).filter(
+        Application.user_id == user.id, Application.status == "applied"
+    ).count()
+    interviews = db.query(Application).filter(
+        Application.user_id == user.id, Application.status == "interview"
+    ).count()
 
     avg_score = db.query(func.avg(JobMatch.fit_score)).scalar() or 0
 
-    # Top companies by match count
     top_companies_raw = (
         db.query(Job.company, func.count(JobMatch.id))
         .join(JobMatch, JobMatch.job_id == Job.id)

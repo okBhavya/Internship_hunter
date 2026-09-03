@@ -52,20 +52,27 @@ class RemotiveSource(JobSourceAdapter):
 
                         for j in job_list:
                             title = (j.get("title") or "").lower()
+                            desc = (j.get("description") or "").lower()
 
-                            # Strict: require internship / entry-level / co-op in title
-                            intern_words = ["intern", "internship", "co-op", "coop", "trainee", "apprentice"]
-                            entry_words = ["junior", "entry", "associate", "new grad", "graduate"]
-                            is_internship = any(w in title for w in intern_words)
-                            is_entry_level = any(w in title for w in entry_words)
-                            if not is_internship and not is_entry_level:
-                                continue
-
-                            # Require the job is in our target field
-                            target_fields = ["software", "engineer", "developer", "data", "machine learning",
-                                             "ml", " ai", "backend", "frontend", "full stack", "fullstack"]
+                            # Accept any job in target fields
+                            # (matching engine will score and filter)
+                            target_fields = [
+                                "software", "engineer", "developer", "data", "machine learning",
+                                "ml", " ai", "backend", "frontend", "full stack", "fullstack",
+                                "python", "java", "intern", "junior", "entry",
+                            ]
                             if not any(f in title for f in target_fields):
                                 continue
+
+                            # Classify employment type from title
+                            if any(w in title for w in ["intern", "internship"]):
+                                emp_type = "internship"
+                            elif any(w in title for w in ["co-op", "coop"]):
+                                emp_type = "co_op"
+                            elif any(w in title for w in ["junior", "entry", "associate", "new grad"]):
+                                emp_type = "entry_level"
+                            else:
+                                emp_type = "full_time"
 
                             raw = RawJob(
                                 external_id=str(j.get("id", "")),
@@ -73,7 +80,7 @@ class RemotiveSource(JobSourceAdapter):
                                 company=j.get("company_name", ""),
                                 location=j.get("candidate_required_location", "Remote"),
                                 remote_type="remote",
-                                employment_type="internship" if "intern" in title else "full_time",
+                                employment_type=emp_type,
                                 description=j.get("description", "")[:5000],
                                 application_url=j.get("url", ""),
                                 source_url=j.get("url", ""),
@@ -83,7 +90,7 @@ class RemotiveSource(JobSourceAdapter):
                             )
                             jobs.append(raw)
 
-                        await asyncio.sleep(0.5)  # Rate limiting
+                        await asyncio.sleep(0.5)
                 except Exception as e:
                     print(f"Remotive search error for {category}: {e}")
                     continue

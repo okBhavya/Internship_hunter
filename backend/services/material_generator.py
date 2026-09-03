@@ -1,142 +1,313 @@
-"""Application material generation service."""
+"""Application material generation service — produces real ATS-friendly content."""
 from __future__ import annotations
 
-from typing import Optional
+import re
+from typing import Optional, List
 
 from sqlalchemy.orm import Session
 
 from backend.models.models import User, Job, JobMatch, Application, ApplicationMaterial
 
 
-def generate_cover_letter(user: User, job: Job, match: Optional[JobMatch] = None) -> str:
-    skills_text = ", ".join(s.name for s in user.skills[:8])
-    latest_exp = user.experiences[0] if user.experiences else None
-    latest_project = user.projects[0] if user.projects else None
+def _extract_job_skills(job: Job) -> List[str]:
+    """Extract key skills/technologies from job description."""
+    desc = (job.description or "").lower()
+    tech_keywords = [
+        "python", "java", "javascript", "typescript", "react", "angular", "vue",
+        "node.js", "nodejs", "fastapi", "django", "flask", "spring",
+        "aws", "gcp", "azure", "docker", "kubernetes", "k8s",
+        "postgresql", "mysql", "mongodb", "redis", "sql",
+        "machine learning", "ml", "deep learning", "nlp", "computer vision",
+        "tensorflow", "pytorch", "scikit-learn", "pandas", "numpy",
+        "git", "ci/cd", "terraform", "linux",
+        "rest api", "graphql", "grpc",
+        "data science", "data analysis", "sql", "tableau",
+        "ai", "artificial intelligence", "llm", "genai",
+        "go", "rust", "c++", "c#",
+    ]
+    found = []
+    for kw in tech_keywords:
+        if kw in desc:
+            found.append(kw)
+    return found[:15]
+
+
+def _generate_ats_resume(user: User, job: Job) -> str:
+    """Generate an ATS-friendly plain text resume tailored to the job."""
     education = user.education_entries[0] if user.education_entries else None
-    degree_info = f"{education.degree} in {education.field_of_study}" if education else "my degree"
+    skills = [s.name for s in user.skills]
+    job_skills = _extract_job_skills(job)
+
+    # Prioritize skills that match the job
+    relevant_skills = [s for s in skills if any(js in s.lower() for js in job_skills)]
+    other_skills = [s for s in skills if s not in relevant_skills]
+    ordered_skills = relevant_skills + other_skills
+
+    lines = []
+    lines.append(f"{user.name.upper()}")
+    lines.append(f"{user.email} | {user.phone} | {user.location}")
+    if user.linkedin_url:
+        lines.append(f"LinkedIn: {user.linkedin_url}")
+    if user.github_url:
+        lines.append(f"GitHub: {user.github_url}")
+    lines.append("")
+
+    # Education
+    if education:
+        lines.append("EDUCATION")
+        lines.append(f"{education.degree} in {education.field_of_study}")
+        lines.append(f"{education.university} | {education.start_date} - {education.end_date}")
+        if education.gpa:
+            lines.append(f"GPA: {education.gpa}")
+        lines.append("")
+
+    # Skills — tailored to job
+    lines.append("TECHNICAL SKILLS")
+    lines.append(", ".join(ordered_skills[:15]))
+    lines.append("")
+
+    # Experience
+    if user.experiences:
+        lines.append("EXPERIENCE")
+        for exp in user.experiences[:3]:
+            lines.append(f"{exp.title} — {exp.company}")
+            lines.append(f"{exp.location} | {exp.start_date} - {exp.end_date}")
+            # Split description into bullet points
+            desc = exp.description or ""
+            bullets = [b.strip() for b in re.split(r'[.\n]', desc) if b.strip()]
+            for bullet in bullets[:4]:
+                lines.append(f"  • {bullet[0].upper() + bullet[1:]}" if bullet else "")
+            lines.append("")
+
+    # Projects
+    if user.projects:
+        lines.append("PROJECTS")
+        for proj in user.projects[:3]:
+            lines.append(f"{proj.name}")
+            lines.append(f"Tech: {proj.technologies}")
+            desc = proj.description or ""
+            bullets = [b.strip() for b in re.split(r'[.\n]', desc) if b.strip()]
+            for bullet in bullets[:3]:
+                lines.append(f"  • {bullet[0].upper() + bullet[1:]}" if bullet else "")
+            lines.append("")
+
+    # Certifications
+    if user.certifications:
+        lines.append("CERTIFICATIONS")
+        for cert in user.certifications:
+            lines.append(f"• {cert.name} — {cert.issuer} ({cert.date_obtained})")
+        lines.append("")
+
+    return "\n".join(lines)
+
+
+def generate_cover_letter(user: User, job: Job, match: Optional[JobMatch] = None) -> str:
+    """Generate a catchy, humanized cover letter tailored to the specific job."""
+    education = user.education_entries[0] if user.education_entries else None
+    degree_info = f"{education.degree} in {education.field_of_study}" if education else "my Computer Science degree"
     university = education.university if education else "my university"
 
-    exp_highlight = ""
-    if latest_exp:
-        exp_highlight = f"During my time as {latest_exp.title} at {latest_exp.company}, I {latest_exp.description.split('.')[0].lstrip('- ')}"
+    # Extract what the company actually does from job description
+    desc = (job.description or "").lower()
+    company_focus = []
+    if any(w in desc for w in ["remote", "distributed", "work from anywhere"]):
+        company_focus.append("remote-first culture")
+    if any(w in desc for w in ["startup", "series", "founded"]):
+        company_focus.append("startup energy")
+    if any(w in desc for w in ["scale", "millions", "billion", "enterprise"]):
+        company_focus.append("large-scale impact")
+    if any(w in desc for w in ["innovat", "cutting", "research", "前沿"]):
+        company_focus.append("technical innovation")
+    if any(w in desc for w in ["open source", "open-source", "community"]):
+        company_focus.append("open-source values")
+    if any(w in desc for w in ["fast-paced", "agile", "move fast"]):
+        company_focus.append("fast-paced environment")
+    if not company_focus:
+        company_focus.append("mission-driven work")
 
-    project_highlight = ""
-    if latest_project:
-        project_highlight = f"I also built {latest_project.name}, which {latest_project.description.split('.')[0]}"
+    # Extract what the role actually involves
+    role_signals = []
+    if any(w in desc for w in ["build", "develop", "ship", "create"]):
+        role_signals.append("building and shipping products")
+    if any(w in desc for w in ["data", "analy", "insight", "metric"]):
+        role_signals.append("working with data to drive decisions")
+    if any(w in desc for w in ["ml", "machine learning", "model", "train", "predict"]):
+        role_signals.append("developing ML models")
+    if any(w in desc for w in ["api", "backend", "service", "microservice"]):
+        role_signals.append("designing and building backend systems")
+    if any(w in desc for w in ["frontend", "ui", "ux", "interface"]):
+        role_signals.append("crafting user interfaces")
+    if any(w in desc for w in ["scale", "performance", "optimi", "reliab"]):
+        role_signals.append("optimizing for scale and reliability")
+    if not role_signals:
+        role_signals.append("solving interesting technical challenges")
 
-    parts = [
-        "Dear Hiring Manager,",
-        "",
-        f"I am writing to express my strong interest in the {job.title} position at {job.company}. As a {degree_info} student at {university}, I am eager to contribute my skills in {skills_text} to your team.",
-        "",
-        exp_highlight,
-        "",
-        project_highlight,
-        "",
-        f"I am particularly drawn to this role because of the opportunity to work on meaningful problems at {job.company}. The position aligns well with my technical background and career goals.",
-    ]
+    # Match user's experience to the role
+    exp_highlights = []
+    for exp in user.experiences[:2]:
+        exp_desc = (exp.description or "").lower()
+        # Find overlap between user's experience and job requirements
+        job_skills = _extract_job_skills(job)
+        matching = [s for s in job_skills if s in exp_desc]
+        if matching:
+            exp_highlights.append(f"my work on {exp.title} at {exp.company} where I used {', '.join(matching[:3])}")
+        else:
+            exp_highlights.append(f"my experience as {exp.title} at {exp.company}")
+
+    project_highlights = []
+    for proj in user.projects[:2]:
+        proj_tech = (proj.technologies or "").lower()
+        job_skills = _extract_job_skills(job)
+        matching = [s for s in job_skills if s in proj_tech]
+        if matching:
+            project_highlights.append(f"{proj.name} (using {', '.join(matching[:2])})")
+
+    # Build the letter
+    opening = f"I'm excited about the {job.title} role at {job.company} — "
+
+    # Pick the strongest opening hook
+    if exp_highlights:
+        opening += f"it's a perfect match for what I've been building. "
+    else:
+        opening += f"it aligns exactly with where I want to take my career."
+
+    paragraph_1 = f"""{opening}
+
+As a {degree_info} student at {university}, I've spent the last couple of years getting my hands dirty with real engineering work. {'Most recently, ' + exp_highlights[0] + '.' if exp_highlights else 'I bring a strong foundation in software engineering and a hunger to learn.'}"""
+
+    if role_signals:
+        paragraph_2 = f"\n\nWhat excites me most is {role_signals[0]}. "
+        if project_highlights:
+            paragraph_2 += f"I've been doing exactly this through projects like {project_highlights[0]}, "
+            paragraph_2 += f"which taught me how to take an idea from concept to a working system."
+        else:
+            paragraph_2 += f"I'm eager to bring my skills in {', '.join(s.name for s in user.skills[:4])} to tackle these challenges at {job.company}."
+
+    paragraph_3 = f"\n\nI'm drawn to {job.company} because of its {company_focus[0]}. "
+    paragraph_3 += f"I believe great engineering happens when talented people work on problems they genuinely care about, "
+    paragraph_3 += f"and that's exactly the environment where I do my best work."
+
+    closing = f"\n\nI'd love to chat about how I can contribute to the team. "
+    closing += f"I'm available {user.availability} and happy to jump on a call anytime."
+
+    signature = f"\n\nBest,\n{user.name}\n{user.email}\n{user.phone}"
+
+    parts = ["Dear Hiring Manager,", "", paragraph_1]
+    if role_signals:
+        parts.append(paragraph_2)
+    parts.extend([paragraph_3, closing, signature])
 
     if user.requires_sponsorship:
-        parts.append("")
-        parts.append("I am an Indian citizen and would require visa sponsorship for this role.")
-
-    parts.extend([
-        "",
-        f"I am available {user.availability} and would welcome the opportunity to discuss how my background can contribute to your team's success.",
-        "",
-        "Thank you for considering my application.",
-        "",
-        "Best regards,",
-        user.name,
-        user.email,
-        user.phone,
-    ])
+        parts.insert(-2, "\n\nNote: I'm an Indian citizen and would require visa sponsorship for this role.")
 
     return "\n".join(parts)
 
 
 def generate_application_summary(user: User, job: Job) -> str:
-    skills = [s.name for s in user.skills[:8]]
+    """Generate a concise one-line application summary."""
+    skills = [s.name for s in user.skills[:6]]
     education = user.education_entries[0] if user.education_entries else None
     exp = user.experiences[0] if user.experiences else None
-    parts = [f"{user.name} -- "]
+
+    parts = [f"{user.name}"]
     if education:
-        parts.append(f"{education.degree} student at {education.university}. ")
-    parts.append(f"Skills: {', '.join(skills)}. ")
+        parts.append(f"{education.degree} student at {education.university}")
     if exp:
-        parts.append(f"Experience: {exp.title} at {exp.company}. ")
-    parts.append(f"Applying for {job.title} at {job.company}.")
-    return "".join(parts)
+        parts.append(f"previously {exp.title} at {exp.company}")
+    parts.append(f"applying for {job.title} at {job.company}")
+
+    return " — ".join(parts)
 
 
 def generate_skills_summary(user: User, job: Job) -> str:
-    job_text = (job.description or "").lower() + " " + (job.requirements or "").lower()
-    relevant = [s for s in user.skills if any(w in job_text for w in s.name.lower().split())]
-    other = [s for s in user.skills if s not in relevant]
+    """Generate a skills summary prioritized by job relevance."""
+    job_skills = _extract_job_skills(job)
+    user_skills = [s.name for s in user.skills]
+
+    relevant = [s for s in user_skills if any(js in s.lower() for js in job_skills)]
+    other = [s for s in user_skills if s not in relevant]
+
     parts = []
     if relevant:
-        parts.append("Relevant: " + ", ".join(s.name for s in relevant[:10]))
+        parts.append("Relevant: " + ", ".join(relevant[:10]))
     if other:
-        parts.append("Additional: " + ", ".join(s.name for s in other[:8]))
-    return " | ".join(parts) if parts else "Skills: " + ", ".join(s.name for s in user.skills[:10])
+        parts.append("Additional: " + ", ".join(other[:6]))
+    return " | ".join(parts) if parts else "Skills: " + ", ".join(user_skills[:10])
 
 
 def generate_why_company(user: User, job: Job) -> str:
+    """Generate a specific 'Why this company?' response."""
     desc = (job.description or "").lower()
     strengths = []
     if any(w in desc for w in ["remote", "distributed", "work from anywhere"]):
-        strengths.append("commitment to remote work")
-    if any(w in desc for w in ["innovat", "cutting-edge", "advanced"]):
-        strengths.append("innovative approach to technology")
-    if any(w in desc for w in ["grow", "learning", "development"]):
-        strengths.append("investment in employee growth")
-    if any(w in desc for w in ["impact", "mission", "meaningful"]):
-        strengths.append("meaningful impact through their work")
-    text = ", ".join(strengths[:2]) if strengths else "innovative work and technical excellence"
+        strengths.append("your commitment to remote work and distributed teams")
+    if any(w in desc for w in ["innovat", "cutting-edge", "advanced", "research"]):
+        strengths.append("your innovative approach to technology and research")
+    if any(w in desc for w in ["grow", "learning", "mentor", "development"]):
+        strengths.append("your investment in employee growth and mentorship")
+    if any(w in desc for w in ["impact", "mission", "meaningful", "purpose"]):
+        strengths.append("the meaningful impact your work has on users")
+    if any(w in desc for w in ["open source", "open-source", "community"]):
+        strengths.append("your contributions to the open-source community")
+    if any(w in desc for w in ["startup", "early", "found", "build from scratch"]):
+        strengths.append("the opportunity to build something from the ground up")
+    if not strengths:
+        strengths.append("the technical challenges you're tackling")
+
+    text = " and ".join(strengths[:2])
     return (
-        f"I am excited about {job.company} because of its {text}. "
-        f"The {job.title} role offers an opportunity to work with talented engineers on problems that matter."
+        f"I'm excited about {job.company} because of {text}. "
+        f"The {job.title} role offers a chance to work alongside talented engineers on problems that genuinely matter."
     )
 
 
 def generate_why_role(user: User, job: Job) -> str:
+    """Generate a specific 'Why this role?' response."""
     skills = [s.name for s in user.skills[:5]]
     desc = (job.description or "").lower()
     signals = []
-    if any(w in desc for w in ["build", "develop", "engineer", "create"]):
-        signals.append("building and developing")
+    if any(w in desc for w in ["build", "develop", "ship", "create"]):
+        signals.append("building and shipping real products")
     if any(w in desc for w in ["design", "architect", "plan"]):
-        signals.append("designing and architecting")
+        signals.append("designing systems that scale")
     if any(w in desc for w in ["data", "analy", "model", "train"]):
-        signals.append("working with data and models")
+        signals.append("working with data and ML models")
     if any(w in desc for w in ["scale", "performance", "optimi"]):
-        signals.append("optimizing for scale and performance")
-    activity = " ".join(signals[:2]) if signals else "solving real engineering challenges"
+        signals.append("optimizing for performance at scale")
+    if any(w in desc for w in ["learn", "grow", "mentor"]):
+        signals.append("learning from experienced engineers")
+    activity = " and ".join(signals[:2]) if signals else "solving real engineering challenges"
+
     return (
         f"The {job.title} position at {job.company} matches my skills in "
-        f"{', '.join(skills)}. I am passionate about {activity} "
-        f"and this role would let me apply my experience with real-world engineering challenges."
+        f"{', '.join(skills)}. I'm passionate about {activity}, "
+        f"and this role would let me apply what I've learned in real-world projects."
     )
 
 
 def generate_recruiter_message(user: User, job: Job) -> str:
+    """Generate a short LinkedIn recruiter message."""
     edu = user.education_entries[0] if user.education_entries else None
     degree = edu.degree if edu else "CS"
     university = edu.university if edu else "my university"
+    skills = [s.name for s in user.skills[:4]]
+
     return (
-        f"Hi, I am {user.name}, a {degree} student at {university}. "
-        f"I am very interested in the {job.title} role at {job.company} "
-        f"and believe my experience with {', '.join(s.name for s in user.skills[:4])} "
-        f"makes me a strong fit. I would love to connect and learn more."
+        f"Hi! I'm {user.name}, a {degree} student at {university}. "
+        f"I came across the {job.title} role at {job.company} and got really excited about it. "
+        f"I've been working with {', '.join(skills)} and would love to bring that experience to your team. "
+        f"Would you be open to a quick chat?"
     )
 
 
 def generate_standard_answers(user: User, job: Job) -> dict:
+    """Generate answers to standard application questions."""
     education = user.education_entries[0] if user.education_entries else None
     edu_degree = education.degree if education else "Computer Science"
     edu_university = education.university if education else "my university"
     edu_gpa = education.gpa if education and education.gpa else None
     skills_str = ", ".join(s.name for s in user.skills[:5])
+
     sponsor_text = "I would require visa sponsorship." if user.requires_sponsorship else "I do not require sponsorship."
     sponsor_detail = (
         "Yes, I require visa sponsorship as an Indian citizen."
@@ -145,22 +316,25 @@ def generate_standard_answers(user: User, job: Job) -> dict:
     )
 
     return {
-        "How did you hear about this position?": "I found this position through an online job board and was immediately drawn to the role and company.",
+        "How did you hear about this position?": "I found this position through an online job board and was immediately drawn to the role and company mission.",
         "Are you legally authorized to work?": f"I am an Indian citizen. {sponsor_text}",
         "When can you start?": f"I am available {user.availability}.",
         "What is your expected salary?": "I am flexible and open to discussion based on the role and market standards.",
-        "Tell us about yourself": f"I am {user.name}, a {edu_degree} student at {edu_university} with experience in {skills_str}.",
+        "Tell us about yourself": f"I am {user.name}, a {edu_degree} student at {edu_university} with hands-on experience in {skills_str}. I've worked on projects ranging from AI-powered tutoring systems to distributed task queues, and I'm passionate about building software that makes a real impact.",
         "What is your GPA?": edu_gpa if edu_gpa else "I would prefer not to disclose at this time.",
         "Do you require visa sponsorship?": sponsor_detail,
         "Link to your portfolio": user.portfolio_url or "https://github.com/bhavyagupta",
         "Link to your GitHub": user.github_url,
         "Link to your LinkedIn": user.linkedin_url,
+        "Why are you interested in this role?": f"I'm excited about this role because it aligns perfectly with my skills in {skills_str} and my passion for building impactful software. The opportunity to work at {job.company} on {job.title} is exactly the kind of challenge I'm looking for.",
+        "What makes you a good fit?": f"My experience with {skills_str} combined with my project work gives me a strong foundation for this role. I've built production systems handling real users and I'm eager to bring that practical experience to {job.company}.",
     }
 
 
 def prepare_application_materials(db: Session, user: User, job: Job, match: Optional[JobMatch] = None) -> dict:
+    """Prepare all application materials for a job."""
     return {
-        "resume": "(Tailored resume content would go here)",
+        "resume": _generate_ats_resume(user, job),
         "cover_letter": generate_cover_letter(user, job, match),
         "summary": generate_application_summary(user, job),
         "skills_summary": generate_skills_summary(user, job),
@@ -172,6 +346,7 @@ def prepare_application_materials(db: Session, user: User, job: Job, match: Opti
 
 
 def classify_question(question: str) -> str:
+    """Classify an application question by type."""
     q = question.lower()
     if any(w in q for w in ["sponsor", "visa", "authorization", "legally", "work permit"]):
         return "sponsorship"
