@@ -46,6 +46,18 @@ from backend.agents.orchestrator import Orchestrator
 settings = get_settings()
 
 
+def _check_playwright():
+    """Check if Playwright is available, raise helpful error if not."""
+    try:
+        from playwright.async_api import async_playwright
+        return True
+    except ImportError:
+        raise HTTPException(
+            501,
+            "Playwright is not installed. Run: pip install playwright && playwright install chromium"
+        )
+
+
 class AutoApplyRequest(BaseModel):
     job_ids: List[int]
     dry_run: bool = True  # Fill forms but don't submit
@@ -509,6 +521,7 @@ def batch_prepare(
 @app.post("/api/auto-apply/detect", tags=["Auto-Apply"])
 async def detect_form(request: FormDetectRequest):
     """Detect form structure on an application URL."""
+    _check_playwright()
     from backend.browser import AutoApplyEngine
     engine = AutoApplyEngine(headless=True)
     try:
@@ -533,6 +546,7 @@ async def auto_fill_application(
     db: Session = Depends(get_db),
 ):
     """Auto-fill application forms for specified jobs."""
+    _check_playwright()
     from backend.browser import AutoApplyEngine
     from backend.services.material_generator import generate_cover_letter
 

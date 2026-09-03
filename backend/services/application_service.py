@@ -61,7 +61,9 @@ def start_application(db: Session, job_id: int, mode: str = "prepare") -> Applic
         # Save individual materials
         for mat_type, content in materials.items():
             if mat_type == "question_answers":
-                for q, a in content.items():
+                for qa_item in content:
+                    q = qa_item.get("question", "")
+                    a = qa_item.get("answer", "")
                     q_type = classify_question(q)
                     qa = QuestionAnswer(
                         application_id=app.id,

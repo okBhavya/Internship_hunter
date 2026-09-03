@@ -137,7 +137,7 @@ class AutoApplyEngine:
             await page.wait_for_timeout(2000)
 
             # Detect platform
-            form.detected_platform = self._detect_platform(page)
+            form.detected_platform = await self._detect_platform(page)
 
             # Check for blocking conditions
             if await self._check_captcha(page):
@@ -241,7 +241,7 @@ class AutoApplyEngine:
                 return result
 
             # Detect platform and fill fields
-            platform = self._detect_platform(page)
+            platform = await self._detect_platform(page)
             selectors = self.PLATFORM_SELECTORS.get(platform, self.PLATFORM_SELECTORS["greenhouse"])
 
             fields_filled = 0
@@ -387,16 +387,13 @@ class AutoApplyEngine:
 
         return result
 
-    def _detect_platform(self, page) -> str:
+    async def _detect_platform(self, page) -> str:
         """Detect which ATS platform the page uses."""
         url = page.url.lower()
         html = ""
 
         try:
-            # Get page HTML for platform detection
-            html = asyncio.get_event_loop().run_until_complete(
-                page.evaluate("document.documentElement.outerHTML.substring(0, 5000)")
-            ) if asyncio.get_event_loop().is_running() else ""
+            html = await page.evaluate("document.documentElement.outerHTML.substring(0, 5000)")
         except Exception:
             pass
 

@@ -44,8 +44,8 @@ def _generate_ats_resume(user: User, job: Job) -> str:
     ordered_skills = relevant_skills + other_skills
 
     lines = []
-    lines.append(f"{user.name.upper()}")
-    lines.append(f"{user.email} | {user.phone} | {user.location}")
+    lines.append(f"{(user.name or "UNKNOWN").upper()}")
+    lines.append(f"{user.email or ""} | {user.phone or ""} | {user.location or ""}")
     if user.linkedin_url:
         lines.append(f"LinkedIn: {user.linkedin_url}")
     if user.github_url:
@@ -188,7 +188,7 @@ As a {degree_info} student at {university}, I've spent the last couple of years 
     paragraph_3 += f"and that's exactly the environment where I do my best work."
 
     closing = f"\n\nI'd love to chat about how I can contribute to the team. "
-    closing += f"I'm available {user.availability} and happy to jump on a call anytime."
+    closing += f"I'm available {user.availability or 'immediately'} and happy to jump on a call anytime."
 
     signature = f"\n\nBest,\n{user.name}\n{user.email}\n{user.phone}"
 
@@ -315,20 +315,20 @@ def generate_standard_answers(user: User, job: Job) -> dict:
         else "No, I do not require sponsorship."
     )
 
-    return {
-        "How did you hear about this position?": "I found this position through an online job board and was immediately drawn to the role and company mission.",
-        "Are you legally authorized to work?": f"I am an Indian citizen. {sponsor_text}",
-        "When can you start?": f"I am available {user.availability}.",
-        "What is your expected salary?": "I am flexible and open to discussion based on the role and market standards.",
-        "Tell us about yourself": f"I am {user.name}, a {edu_degree} student at {edu_university} with hands-on experience in {skills_str}. I've worked on projects ranging from AI-powered tutoring systems to distributed task queues, and I'm passionate about building software that makes a real impact.",
-        "What is your GPA?": edu_gpa if edu_gpa else "I would prefer not to disclose at this time.",
-        "Do you require visa sponsorship?": sponsor_detail,
-        "Link to your portfolio": user.portfolio_url or "https://github.com/bhavyagupta",
-        "Link to your GitHub": user.github_url,
-        "Link to your LinkedIn": user.linkedin_url,
-        "Why are you interested in this role?": f"I'm excited about this role because it aligns perfectly with my skills in {skills_str} and my passion for building impactful software. The opportunity to work at {job.company} on {job.title} is exactly the kind of challenge I'm looking for.",
-        "What makes you a good fit?": f"My experience with {skills_str} combined with my project work gives me a strong foundation for this role. I've built production systems handling real users and I'm eager to bring that practical experience to {job.company}.",
-    }
+    return [
+        {"question": "How did you hear about this position?", "answer": "I found this position through an online job board and was immediately drawn to the role and company mission."},
+        {"question": "Are you legally authorized to work?", "answer": f"I am an Indian citizen. {sponsor_text}"},
+        {"question": "When can you start?", "answer": f"I am available {user.availability or 'immediately'}."},
+        {"question": "What is your expected salary?", "answer": "I am flexible and open to discussion based on the role and market standards."},
+        {"question": "Tell us about yourself", "answer": f"I am {user.name or 'a candidate'}, a {edu_degree} student at {edu_university} with hands-on experience in {skills_str}. I've worked on projects ranging from AI-powered tutoring systems to distributed task queues, and I'm passionate about building software that makes a real impact."},
+        {"question": "What is your GPA?", "answer": edu_gpa if edu_gpa else "I would prefer not to disclose at this time."},
+        {"question": "Do you require visa sponsorship?", "answer": sponsor_detail},
+        {"question": "Link to your portfolio", "answer": user.portfolio_url or "https://github.com/bhavyagupta"},
+        {"question": "Link to your GitHub", "answer": user.github_url or ""},
+        {"question": "Link to your LinkedIn", "answer": user.linkedin_url or ""},
+        {"question": "Why are you interested in this role?", "answer": f"I'm excited about this role because it aligns perfectly with my skills in {skills_str} and my passion for building impactful software. The opportunity to work at {job.company} on {job.title} is exactly the kind of challenge I'm looking for."},
+        {"question": "What makes you a good fit?", "answer": f"My experience with {skills_str} combined with my project work gives me a strong foundation for this role. I've built production systems handling real users and I'm eager to bring that practical experience to {job.company}."},
+    ]
 
 
 def prepare_application_materials(db: Session, user: User, job: Job, match: Optional[JobMatch] = None) -> dict:
