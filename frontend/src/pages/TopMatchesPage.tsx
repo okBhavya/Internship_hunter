@@ -78,6 +78,20 @@ export default function TopMatchesPage() {
               {match.concerns?.length > 0 && (
                 <div className="text-xs text-orange-500">⚠ {match.concerns[0]}</div>
               )}
+
+              <div className="flex gap-2 mt-3 pt-3 border-t border-gray-100">
+                <button onClick={(e) => { e.stopPropagation(); handlePrepare(job.id); }}
+                  className="flex-1 px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-700 transition-colors">
+                  Prepare
+                </button>
+                {job.application_url && (
+                  <a href={job.application_url} target="_blank" rel="noopener noreferrer"
+                    onClick={e => e.stopPropagation()}
+                    className="px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg text-xs font-medium hover:bg-blue-100 transition-colors flex items-center gap-1">
+                    Apply
+                  </a>
+                )}
+              </div>
             </div>
           ))}
         </div>
